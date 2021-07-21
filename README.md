@@ -23,3 +23,5 @@ The project is a simple serial communication based servo motor control. The seri
 ---
 
 ### Circuit Diagram
+
+![Circuit Diagram](https://github.com/Mitrajeet-Golsangi/Bluetooth-Controlled-Lock/blob/main/circuit_diagram.png)
