@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import 'package:mm_app/connection.dart';
 import 'package:mm_app/notification_service.dart';
 import 'package:mm_app/servo.dart';
-
+import 'BluetoothDeviceListEntry.dart';
+import 'authenticationPages.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,155 +11,176 @@ Future<void> main() async {
   runApp(MyApp());
 }
 
-
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
+  const MyApp({Key key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MAR Course Project - F5',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
-      home: FutureBuilder(
-        future: FlutterBluetoothSerial.instance.requestEnable(),
-        builder: (context, future) {
-          if (future.connectionState == ConnectionState.waiting) {
-            return Scaffold(
-              body: Container(
-                height: double.infinity,
-                child: Center(
-                  child: Icon(
-                    Icons.bluetooth_disabled,
-                    size: 200.0,
-                    color: Colors.blue,
-                  ),
-                ),
-              ),
-            );
-          } else if (future.connectionState == ConnectionState.done) {
-            // return MyHomePage(title: 'Flutter Demo Home Page');
-            return Home();
-          } else {
-            return Home();
-          }
-        },
-        // child: MyHomePage(title: 'Flutter Demo Home Page'),
-      ),
+      home: FingerprintPage(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class Home extends StatefulWidget {
+// class Home extends StatefulWidget {
+//   @override
+//   _HomeState createState() => _HomeState();
+// }
+
+// class _HomeState extends State<Home> {
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return SafeArea(
+//         child: Scaffold(
+//       appBar: AppBar(
+//         title: Text('Connection'),
+//       ),
+//       body: SelectBondedDevicePage(
+//         onCahtPage: (device1) {
+//           BluetoothDevice device = device1;
+//           Navigator.push(
+//             context,
+//             MaterialPageRoute(
+//               builder: (context) {
+//                 return ChatPage(server: device);
+//               },
+//             ),
+//           );
+//         },
+//       ),
+//     ));
+//   }
+// }
+
+class HomePage extends StatefulWidget {
+  const HomePage({Key key}) : super(key: key);
+
   @override
-  _HomeState createState() => _HomeState();
+  _HomePageState createState() => _HomePageState();
 }
 
-class _HomeState extends State<Home> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver{
+  BluetoothState _bluetoothState = BluetoothState.UNKNOWN;
+
+  List<BluetoothDevice> devices = [BluetoothDevice()];
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addObserver(this);
+
+    _getBTState();
+    _stateChangeListner();
+    _listBondedDevices();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  _getBTState() {
+    FlutterBluetoothSerial.instance.state.then((state) {
+
+      _bluetoothState = state;
+      if (_bluetoothState.isEnabled) {
+        _listBondedDevices();
+      }
+      setState(() {});
+    });
+  }
+
+  _stateChangeListner() {
+    FlutterBluetoothSerial.instance
+        .onStateChanged()
+        .listen((BluetoothState state) {
+      _bluetoothState = state;
+      if (_bluetoothState.isEnabled) {
+        _listBondedDevices();
+      }else{
+        devices.clear();
+      }
+      print("State is Enabled: ${state.isEnabled}");
+      setState(() {});
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state.index == 0) {
+      // resume
+      if (_bluetoothState.isEnabled) {
+        _listBondedDevices();
+      }
+    }
+  }
+
+  _listBondedDevices() {
+    FlutterBluetoothSerial.instance
+        .getBondedDevices()
+        .then((List<BluetoothDevice> bodedDevices) {
+      devices = bodedDevices;
+      setState(() {});
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-        child: Scaffold(
-      appBar: AppBar(
-        title: Text('Connection'),
+    return Scaffold(
+      appBar: AppBar(title: Text("MAR Course Project")),
+      body: Container(
+        padding: EdgeInsets.only(top: 20.0, left: 10.0),
+        child: Column(children: <Widget>[
+          SwitchListTile(
+            title: Text('Enable Bluetooth'),
+            value: _bluetoothState.isEnabled,
+            onChanged: (bool value) {
+              future() async {
+                if (value) {
+                  await FlutterBluetoothSerial.instance.requestEnable();
+                } else {
+                  await FlutterBluetoothSerial.instance.requestDisable();
+                }
+              }
+
+              future().then((_) {
+                setState(() {});
+              });
+            },
+          ),
+          ListTile(
+            title: Text("Bluetooth STATUS"),
+            subtitle: Text(_bluetoothState.toString()),
+            trailing: ElevatedButton(
+                child: Text("Settings"),
+                onPressed: () {
+                  FlutterBluetoothSerial.instance.openSettings();
+                }),
+          ),
+          Expanded(
+              child: ListView(
+            children: devices
+                .map((_device) => BluetoothDeviceListEntry(
+                      device: _device,
+                      enabled: true,
+                      onTap: () {
+                        _startDetailPage(context, _device);
+                        print(_device.name);
+                      },
+                    ))
+                .toList(),
+          ))
+        ]),
       ),
-      body: SelectBondedDevicePage(
-        onCahtPage: (device1) {
-          BluetoothDevice device = device1;
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) {
-                return ChatPage(server: device);
-              },
-            ),
-          );
-        },
-      ),
-    ));
+    );
+  }
+  void _startDetailPage(BuildContext context, BluetoothDevice server) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (context) {
+      return ChatPage(server: server);
+    }));
   }
 }
-
-
-
-// class MyHomePage extends StatefulWidget {
-//   MyHomePage({Key key, this.title}) : super(key: key);
-//   final String title;
-//
-//   @override
-//   _MyHomePageState createState() => _MyHomePageState();
-// }
-//
-// class _MyHomePageState extends State<MyHomePage> {
-//   int _currentStep = 0;
-//   BluetoothDevice device;
-//
-//   void onStepContinue() async {
-//     if (_currentStep == 0) {
-//       setState(() {
-//         _currentStep = 1;
-//       });
-//     }
-//   }
-//
-//   void onStepCancel() {
-//     if (_currentStep == 1) {
-//       setState(() {
-//         _currentStep = 0;
-//       });
-//     }
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     List<Step> _steps = [
-//       Step(
-//         title: Text('Connection'),
-//         content: Container(
-//           height: 500,
-//           child: SelectBondedDevicePage(
-//             onCahtPage: (BluetoothDevice device) {
-//               Navigator.push(
-//                 context,
-//                 MaterialPageRoute(
-//                   builder: (context) {
-//                     return ChatPage(server: device);
-//                   },
-//                 ),
-//               );
-//             },
-//           ),
-//         ),
-//         state: StepState.editing,
-//         isActive: true,
-//       ),
-//       Step(
-//         title: Text('Led'),
-//         content: Container(
-//             // child: onCahtPage,
-//             ),
-//       ),
-//     ];
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Text(widget.title),
-//       ),
-//       body: Stepper(
-//         steps: _steps,
-//         type: StepperType.horizontal,
-//         currentStep: _currentStep,
-//         onStepContinue: onStepContinue,
-//         onStepCancel: onStepCancel,
-//       ),
-//       floatingActionButton: FloatingActionButton(
-//         onPressed: () {
-//           //
-//         },
-//         tooltip: 'Increment',
-//         child: Icon(Icons.search),
-//       ), // This trailing comma makes auto-formatting nicer for build methods.
-//     );
-//   }
-// }
